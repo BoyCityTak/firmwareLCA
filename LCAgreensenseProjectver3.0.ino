@@ -26,8 +26,8 @@ bool hasFormula       = false;
 Preferences preferences;
 
 unsigned int _modeStatus = 0;
-#define connectedWifiMode  0
-#define pairingBleMode     1
+const unsigned int connectedWifiMode = 0;
+const unsigned int pairingBleMode    = 1;
 
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
@@ -189,7 +189,7 @@ void MqttCallback(String topic, byte* payload, unsigned int _length) {
         else if (_command == "formula") {
           Serial.println("PlantingFormulaSent...");
           if (!SD.begin(SD_CS)) {
-            Serial.println("SD Card initialization failed!"); 
+            Serial.println("SD Card initialization failed!");
             //return;
           }
           File file = SD.open("/data.json", FILE_WRITE);
@@ -611,7 +611,7 @@ int calculateCurrentDay() {
 
 void sendCurrentStateDataToSlave(int currentDay) {
   if (currentDay < 0) {
-    Serial.println("Process Finished! No more states."); 
+    Serial.println("Process Finished! No more states.");
     return;
   }
   int currentStateIndex = -1;
@@ -622,7 +622,7 @@ void sendCurrentStateDataToSlave(int currentDay) {
     }
   }
   if (currentStateIndex == -1) {
-    Serial.println("No active state found for today."); 
+    Serial.println("No active state found for today.");
     return;
   }
   /* State changed! Sending new data... */
@@ -812,20 +812,21 @@ void setup() {
 unsigned int currentDay = 1;
 void loop() {
   //int currentDay = calculateCurrentDay();
-  if (SW_ADC() == 1 && millis() - lastButtonPress > 500) { /* SW1 */
-    lastButtonPress = millis();
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
-    vTaskDelete(WifiStatus);
-    delay(500);
-    if (!_bleActive) {
-      Serial.println("Pairing device with BLE...");
-      _modeStatus = pairingBleMode;
-      _bleActive = true;
-      pairDeviceWithBLE();
+  if (!_bleActive) {
+    if (SW_ADC() == 1 && millis() - lastButtonPress > 500) {
+      lastButtonPress = millis();
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
+      vTaskDelete(WifiStatus);
+      delay(500);
+      if (!_bleActive) {
+        Serial.println("Pairing device with BLE...");
+        _modeStatus = pairingBleMode;
+        _bleActive = true;
+        pairDeviceWithBLE();
+      }
     }
-  }
-  if (_modeStatus == pairingBleMode) {
+  } else if (_modeStatus == pairingBleMode) {
     static unsigned long lastMelodyTime = 0;
     toggleLedBlinkForPairing();
     checkHeapMemory();
@@ -835,11 +836,11 @@ void loop() {
     }
     if (SW_ADC() == 1 && millis() - lastButtonPress > 500) {
       lastButtonPress = millis();
-      Serial.println("Cancelled by user");
+      _bleActive = false;
+      _modeStatus = connectedWifiMode;
+      MCP.digitalWrite(statusLedAddDevice, LOW);
       //BLEDevice::deinit();
-      //_bleActive = false;
-      //_modeStatus = connectedWifiMode;
-      //MCP.digitalWrite(statusLedAddDevice, LOW);
+      Serial.println("Cancelled by user");
       playPairingCancelTone();
       esp32Restart();
     }
@@ -850,6 +851,7 @@ void loop() {
     }
     delay(10);
   }
+
   if (isRunningDevice && hasFormula) {
     if (_modeStatus != pairingBleMode) {
       if (client.connected()) {
